@@ -8,7 +8,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; }
-        
+
         #loginSection {
             display: flex;
             justify-content: center;
@@ -71,7 +71,7 @@
             cursor: pointer;
             font-weight: bold;
         }
-        
+
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -87,7 +87,7 @@
         }
         .stat-card .number { font-size: 32px; font-weight: bold; color: #6B4EFF; }
         .stat-card .label { font-size: 12px; color: #666; margin-top: 5px; text-transform: uppercase; }
-        
+
         .filters {
             background: white;
             padding: 20px;
@@ -113,7 +113,7 @@
             cursor: pointer;
             font-weight: bold;
         }
-        
+
         .logs-table {
             background: white;
             border-radius: 10px;
@@ -136,7 +136,7 @@
             font-size: 13px;
         }
         .logs-table tr:hover { background: #f8f9fa; }
-        
+
         .badge {
             padding: 5px 12px;
             border-radius: 20px;
@@ -149,7 +149,7 @@
         .badge-warning { background: #fff3e0; color: #f57c00; }
         .badge-error { background: #ffebee; color: #d32f2f; }
         .badge-fatal { background: #f3e5f5; color: #7b1fa2; }
-        
+
         .export-btn {
             position: fixed;
             bottom: 30px;
@@ -164,7 +164,7 @@
             font-weight: bold;
             box-shadow: 0 4px 15px rgba(0,200,83,0.4);
         }
-        
+
         .loading { text-align: center; padding: 60px; color: #666; font-size: 16px; }
         .error {
             background: #ffebee;
@@ -175,6 +175,7 @@
             border-left: 4px solid #d32f2f;
         }
     </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -184,7 +185,7 @@
             <h2>Connexion EduConnect</h2>
             <p>Entrez vos identifiants Supabase</p>
             <input type="text" id="supabaseUrl" placeholder="URL Supabase">
-            <input type="password" id="supabaseKey" placeholder="Clé Anon Publique">
+            <input type="password" id="supabaseKey" placeholder="Cle Anon Publique">
             <button onclick="connect()">Se connecter</button>
             <div id="loginError"></div>
         </div>
@@ -267,7 +268,8 @@
     </div>
 
     <script>
-        let supabase = null;
+        // Utilisation de 'client' au lieu de 'supabase' pour eviter le conflit avec la lib CDN
+        let client = null;
         let currentLogs = [];
 
         window.onload = function() {
@@ -286,18 +288,38 @@
             const errorDiv = document.getElementById('loginError');
             errorDiv.textContent = '';
 
-            if (!url || !key) {
-                errorDiv.textContent = 'Veuillez remplir les deux champs';
+            if (!url) {
+                errorDiv.textContent = 'Veuillez entrer l\'URL Supabase';
+                return;
+            }
+            if (!key) {
+                errorDiv.textContent = 'Veuillez entrer la cle Anon';
                 return;
             }
 
             try {
-                supabase = window.supabase.createClient(url, key);
-                localStorage.setItem('supabase_url', url);
-                localStorage.setItem('supabase_key', key);
-                document.getElementById('loginSection').style.display = 'none';
-                document.getElementById('dashboardSection').style.display = 'block';
-                loadLogs();
+                if (typeof window.supabase === 'undefined') {
+                    throw new Error('La bibliotheque Supabase n\'est pas chargee.');
+                }
+
+                client = window.supabase.createClient(url, key);
+
+                // Test de connexion
+                client.from('app_logs').select('count').limit(1).then(({ data, error }) => {
+                    if (error) {
+                        errorDiv.textContent = 'Erreur de connexion: ' + error.message;
+                        return;
+                    }
+
+                    localStorage.setItem('supabase_url', url);
+                    localStorage.setItem('supabase_key', key);
+
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('dashboardSection').style.display = 'block';
+
+                    loadLogs();
+                });
+
             } catch (err) {
                 errorDiv.textContent = 'Erreur: ' + err.message;
             }
@@ -306,13 +328,13 @@
         function disconnect() {
             localStorage.removeItem('supabase_url');
             localStorage.removeItem('supabase_key');
-            supabase = null;
+            client = null;
             location.reload();
         }
 
         async function loadLogs() {
-            if (!supabase) return;
-            
+            if (!client) return;
+
             const tbody = document.getElementById('logsBody');
             tbody.innerHTML = '<tr><td colspan="7" class="loading">Chargement...</td></tr>';
 
@@ -321,7 +343,7 @@
             const dateFrom = document.getElementById('filterDateFrom').value;
             const dateTo = document.getElementById('filterDateTo').value;
 
-            let query = supabase.from('app_logs').select('*').order('created_at', { ascending: false }).limit(500);
+            let query = client.from('app_logs').select('*').order('created_at', { ascending: false }).limit(500);
             if (level) query = query.eq('level', level);
             if (category) query = query.eq('category', category);
             if (dateFrom) query = query.gte('created_at', dateFrom);
@@ -394,7 +416,7 @@
             return div.innerHTML;
         }
 
-        setInterval(() => { if (supabase) refreshLogs(); }, 30000);
+        setInterval(() => { if (client) refreshLogs(); }, 30000);
     </script>
 </body>
 </html>
